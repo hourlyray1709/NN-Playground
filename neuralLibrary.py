@@ -1,6 +1,6 @@
 import numpy as np 
 import random 
-
+import matplotlib.pyplot as plt 
 
 def LeakyReLU(x, a=0.01): 
     return np.where(x > 0, x, a * x)
@@ -63,21 +63,21 @@ class Layer:
         delta = MSE_gradient * actFuncGradient           # derive of loss wrt to z value, shape (num_neurons,)
         self.delta = delta               
         
-        self.trainEx_weight_gradients = np.outer(self.inputs, delta)
+        self.trainEx_weight_gradients = np.outer(self.inputs, delta)     # stores gradients for single training Example - trainEx
         self.trainEx_bias_gradients = delta 
-        self.loss = MSE_error 
+        self.loss = MSE_error                                            # save loss for loss visualisation later 
     def hidlayer_backward(self, nextLayer): 
-        actDerivFunc = activationFuncToGradFunc[self.activation_func]
-        actFuncGradient = actDerivFunc(self.z)
-        delta = np.dot(nextLayer.weights, nextLayer.delta) * actFuncGradient 
+        actDerivFunc = activationFuncToGradFunc[self.activation_func]    # calculate deriv of act function wrt to inputs 
+        actFuncGradient = actDerivFunc(self.z)                      
+        delta = np.dot(nextLayer.weights, nextLayer.delta) * actFuncGradient  # find deriv of cost wrt to own activation 
         self.delta = delta 
 
         self.trainEx_weight_gradients = np.outer(self.inputs, delta)
         self.trainEx_bias_gradients = delta 
     def addGradients(self): 
-        self.batch_weight_gradients += self.trainEx_weight_gradients
+        self.batch_weight_gradients += self.trainEx_weight_gradients      # sum up gradients for entire batch 
         self.batch_bias_gradients += self.trainEx_bias_gradients 
-        self.batchSize += 1
+        self.batchSize += 1                                               # used to calculate average gradient over batch 
     def resetGradients(self): 
         input_size = self.input_size 
         num_neurons = self.num_neurons
@@ -86,7 +86,7 @@ class Layer:
         self.trainEx_weight_gradients = np.zeros((input_size, num_neurons))
         self.trainEx_bias_gradients = np.zeros(num_neurons)
         self.batchSize = 0 
-    def applyGradients(self, learnRate=0.01): 
+    def applyGradients(self, learnRate=0.01):                                        # adjust weights according gradients in batch 
         self.weights -= learnRate * self.batch_weight_gradients / self.batchSize
         self.biases -= learnRate * self.batch_bias_gradients / self.batchSize 
         self.resetGradients()
@@ -124,13 +124,14 @@ class Network:
         for i in self.layers: 
             i.applyGradients(learnRate)
     
-    def train(self, dataInputs, dataOutputs, batchSize, epochs, learnRate=0.05): 
+    def train(self, dataInputs, dataOutputs, batchSize, epochs, learnRate=0.05, visualise=False): 
         if len(dataInputs) != len(dataOutputs): 
             print("WARNING: Length of training data does not match labels! Cannot train neural network")
             return None 
 
         n = len(dataInputs)
         batches = n // batchSize
+        losses = [] 
 
         data = {dataInputs[i] : dataOutputs[i] for i in range(n)}
         random.shuffle(dataInputs)
@@ -142,19 +143,38 @@ class Network:
                     self.backward(data[dataInputs[j]])
                     loss += self.layers[-1].loss 
                 self.applyGradients(learnRate)
+            if visualise: 
+                losses.append(loss)
+        
             print("Epoch: {}, Loss: {}".format(epoch, loss))
+        if visualise: 
+            x_axis = np.arange(epochs)
+            plt.plot(x_axis, losses, label="Training Loss")
+            plt.xlabel("Epoch")
+            plt.ylabel("Loss")
+            plt.show()
 
 
 
 
+def XORExample():
+    XORNet = Network([4,4,1], 2)
 
-XORNet = Network([4,4,1], 2)
+    dataInputs = [(0,0), (0,1), (1,0), (1,1)] 
+    dataOutputs = [0, 1, 1, 0] 
 
-dataInputs = [(0,0), (0,1), (1,0), (1,1)] 
-dataOutputs = [0, 1, 1, 0] 
+    XORNet.train(dataInputs, dataOutputs, 4, 1000, visualise=True)
+    XORNet.forward([1,1])
+    print(XORNet.output)
 
+def NANDExample(): 
+    NANDNet = Network([4,4,1], 2)
 
-XORNet.train(dataInputs, dataOutputs, 4, 1000)
-XORNet.forward([1,0])
-print(XORNet.output)
+    dataInputs = [(0,0), (0,1), (1,0), (1,1)] 
+    dataOutputs = [1, 1, 1, 0]
 
+    NANDNet.train(dataInputs, dataOutputs, 4, 1000, visualise=True)
+    NANDNet.forward([1,1])
+    print(NANDNet.output)
+
+XORExample()
