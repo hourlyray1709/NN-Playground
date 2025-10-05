@@ -8,6 +8,11 @@ def LeakyReLU(x, a=0.01):
 def LeakyReLU_grad(x, a=0.01): 
     return np.where(x>0, 1, a)
 
+def tanh(x): 
+    return np.tanh(x)
+
+def tanhGrad(x): 
+    return 1/(np.cosh(x)**2)
 
 def MSE(predicted, actual): 
     actual = np.array(actual)
@@ -20,7 +25,7 @@ def MSE_grad(predicted, actual):
 
 activationFuncToGradFunc = {
     LeakyReLU : LeakyReLU_grad,
-
+    tanh: tanhGrad,
 }
 
 class Layer: 
@@ -68,15 +73,16 @@ class Layer:
         self.loss = MSE_error                                            # save loss for loss visualisation later 
     def hidlayer_backward(self, nextLayer): 
         actDerivFunc = activationFuncToGradFunc[self.activation_func]    # calculate deriv of act function wrt to inputs 
-        actFuncGradient = actDerivFunc(self.z)                      
-        delta = np.dot(nextLayer.weights, nextLayer.delta) * actFuncGradient  # find deriv of cost wrt to own activation 
+        actFuncGradient = actDerivFunc(self.z).flatten()
+        next_delta = nextLayer.delta.flatten()                      
+        delta = np.dot(nextLayer.weights, next_delta) * actFuncGradient  # find deriv of cost wrt to own activation 
         self.delta = delta 
 
         self.trainEx_weight_gradients = np.outer(self.inputs, delta)
         self.trainEx_bias_gradients = delta 
     def addGradients(self): 
         self.batch_weight_gradients += self.trainEx_weight_gradients      # sum up gradients for entire batch 
-        self.batch_bias_gradients += self.trainEx_bias_gradients 
+        self.batch_bias_gradients += self.trainEx_bias_gradients.flatten()
         self.batchSize += 1                                               # used to calculate average gradient over batch 
     def resetGradients(self): 
         input_size = self.input_size 
@@ -144,9 +150,9 @@ class Network:
                     loss += self.layers[-1].loss 
                 self.applyGradients(learnRate)
             if visualise: 
-                losses.append(loss)
+                losses.append(loss / len(dataInputs))
         
-            print("Epoch: {}, Loss: {}".format(epoch, loss))
+            print("Epoch: {}, Loss: {}".format(epoch, loss / len(dataInputs)))
         if visualise: 
             x_axis = np.arange(epochs)
             plt.plot(x_axis, losses, label="Training Loss")
@@ -158,7 +164,7 @@ class Network:
 
 
 def XORExample():
-    XORNet = Network([4,4,1], 2)
+    XORNet = Network([8,8,1], 2)
 
     dataInputs = [(0,0), (0,1), (1,0), (1,1)] 
     dataOutputs = [0, 1, 1, 0] 
@@ -177,4 +183,30 @@ def NANDExample():
     NANDNet.forward([1,1])
     print(NANDNet.output)
 
-XORExample()
+def sinExample(): 
+    sinNet = Network([16,16,8,1], 1, activation_funcs=[tanh, tanh, tanh, tanh])
+
+    dataInputs = np.linspace(-2*np.pi, 2*np.pi, 1000)
+    dataOutputs = [np.sin(i) for i in dataInputs]
+
+    sinNet.train(dataInputs, dataOutputs, 50, 400, visualise=False)
+    sinNet.forward([0])
+    print(sinNet.output)
+
+    # Generate inputs
+    x_vals = np.linspace(-2*np.pi, 2*np.pi, 500)
+    y_true = np.sin(x_vals)
+
+    # Get network predictions
+    y_pred = [sinNet.forward([x])[0] for x in x_vals]
+
+    # Plot
+    plt.plot(x_vals, y_true, label="True sin(x)")
+    plt.plot(x_vals, y_pred, label="NN approximation", linestyle='dashed')
+    plt.xlabel("x")
+    plt.ylabel("y")
+    plt.title("Neural Network vs True sin(x)")
+    plt.legend()
+    plt.show()
+
+sinExample()
