@@ -123,23 +123,38 @@ class Network:
     def applyGradients(self, learnRate=0.05): 
         for i in self.layers: 
             i.applyGradients(learnRate)
+    
+    def train(self, dataInputs, dataOutputs, batchSize, epochs, learnRate=0.05): 
+        if len(dataInputs) != len(dataOutputs): 
+            print("WARNING: Length of training data does not match labels! Cannot train neural network")
+            return None 
+
+        n = len(dataInputs)
+        batches = n // batchSize
+
+        data = {dataInputs[i] : dataOutputs[i] for i in range(n)}
+        random.shuffle(dataInputs)
+        for epoch in range(epochs): 
+            loss = 0 
+            for i in range(0, len(dataInputs), batchSize): 
+                for j in range(i, i+batchSize): 
+                    self.forward(dataInputs[j])
+                    self.backward(data[dataInputs[j]])
+                    loss += self.layers[-1].loss 
+                self.applyGradients(learnRate)
+            print("Epoch: {}, Loss: {}".format(epoch, loss))
+
+
+
+
 
 XORNet = Network([4,4,1], 2)
 
-trainData = [([0,0], [0]), ([0,1], [1]), ([1,0], [1]), ([1,1], [0])] * 5000
+dataInputs = [(0,0), (0,1), (1,0), (1,1)] 
+dataOutputs = [0, 1, 1, 0] 
 
 
-for i in range(0, len(trainData), 4):
-    loss = 0 
-    for j in range(0, 4): 
-        XORNet.forward(trainData[i+j][0])
-        XORNet.backward(trainData[i+j][1])
-        loss += XORNet.layers[-1].loss 
-    loss = loss / 4 
-    print("batch {}, loss={}".format(i, loss))
-    XORNet.applyGradients()
-
-XORNet.forward([1,1])
+XORNet.train(dataInputs, dataOutputs, 4, 1000)
+XORNet.forward([1,0])
 print(XORNet.output)
-
 
