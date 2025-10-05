@@ -5,13 +5,29 @@ import random
 def LeakyReLU(x, a=0.01): 
     return np.where(x > 0, x, a * x)
 
+def LeakyReLU_grad(x, a=0.01): 
+    return np.where(x>0, 1, a)
+
+
 def MSE(predicted, actual): 
     actual = np.array(actual)
     error = np.mean((predicted - actual)**2)
     return error 
 
+def MSE_grad(predicted, actual): 
+    actual = np.array(actual)
+    return 2 * (predicted - actual)
+
+activationFuncToGradFunc = {
+    LeakyReLU : LeakyReLU_grad,
+
+}
+
 class Layer: 
     def __init__(self, num_neurons, input_size, activation_func, override_weights=None, override_bias=None, loss_func=None): 
+        self.input_size = input_size 
+        self.num_neurons = num_neurons
+
         self.activation_func = activation_func
         self.loss_func = None 
 
@@ -21,26 +37,77 @@ class Layer:
             self.weights = np.array(override_weights)
 
         if override_bias == None: 
-            self.biases = np.zeros(num_neurons,)
+            self.biases = np.random.uniform(-0.1, 0.1, (num_neurons))
         else: 
             self.biases = np.array(override_bias)
 
         self.output = np.zeros(num_neurons,)
 
-        self.weight_gradients = np.zeros((input_size, num_neurons))
-        self.bias_gradients = np.zeros(num_neurons)
+        self.batch_weight_gradients = np.zeros((input_size, num_neurons))
+        self.batch_bias_gradients = np.zeros(num_neurons)
+        self.trainEx_weight_gradients = np.zeros((input_size, num_neurons))
+        self.trainEx_bias_gradients = np.zeros(num_neurons)
+        self.batchSize = 0 
     def forward(self, inputs): 
         inputs = np.array(inputs)
-        z = np.dot(inputs, self.weights) + self.biases 
+        z = np.dot(inputs, self.weights) + self.biases
+        self.z = z                                             # store feedforward z values for backprop 
+        self.inputs = inputs                                          
         self.output = self.activation_func(z)
         return self.output
-    def backward(self, outputs): 
+    def outlayer_backward(self, outputs): 
         MSE_error = MSE(self.output, outputs)
+        MSE_gradient = MSE_grad(self.output, outputs)         # MSE grad is the deriv of Loss wrt activation, shape (num_neurons,)
+        actDerivFunc = activationFuncToGradFunc[self.activation_func]  # use the correct gradient function depending on actFuc
+        actFuncGradient = actDerivFunc(self.z)           # deriv of activation wrt to feedforward z value, shape (num_neurons,)
+        delta = MSE_gradient * actFuncGradient           # derive of loss wrt to z value, shape (num_neurons,)
+        self.delta = delta               
         
+        self.trainEx_weight_gradients = np.outer(self.inputs, delta)
+        self.trainEx_bias_gradients = delta 
+    def hidlayer_backward(self, nextLayer): 
+        actDerivFunc = activationFuncToGradFunc[self.activation_func]
+        actFuncGradient = actDerivFunc(self.z)
+        delta = np.dot(nextLayer.weights, nextLayer.delta) * actFuncGradient 
+        self.delta = delta 
+
+        self.trainEx_weight_gradients = np.outer(self.inputs, delta)
+        self.trainEx_bias_gradients = delta 
+    def addGradients(self): 
+        self.batch_weight_gradients += self.trainEx_weight_gradients
+        self.batch_bias_gradients += self.trainEx_bias_gradients 
+        self.batchSize += 1
+    def resetGradients(self): 
+        input_size = self.input_size 
+        num_neurons = self.num_neurons
+        self.batch_weight_gradients = np.zeros((input_size, num_neurons))
+        self.batch_bias_gradients = np.zeros(num_neurons)
+        self.trainEx_weight_gradients = np.zeros((input_size, num_neurons))
+        self.trainEx_bias_gradients = np.zeros(num_neurons)
+        self.batchSize = 0 
+    def applyGradients(self, learnRate=0.01): 
+        self.weights -= learnRate * self.batch_weight_gradients / self.batchSize
+        self.biases -= learnRate * self.batch_bias_gradients / self.batchSize 
+        self.resetGradients()
+
+
+
 
 
 # testing code 
 
-ANDLayer = Layer(num_neurons=1, input_size=2, activation_func=LeakyReLU)
-ANDLayer.forward([1,1])
-print(ANDLayer.output)
+hid1 = Layer(4, 2, LeakyReLU)
+hid2 = Layer(4, 4, LeakyReLU)
+out = Layer(1, 4, LeakyReLU)
+
+hid1.forward([0, 0])
+hid2.forward(hid1.output)
+out.forward(hid2.output)
+
+print(hid1.output)
+print(hid2.output)
+print(out.output)
+
+out.outlayer_backward([0])
+hid2.hidlayer_backward(out)
+hid1.hidlayer_backward(hid2)
