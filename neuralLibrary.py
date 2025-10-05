@@ -65,6 +65,7 @@ class Layer:
         
         self.trainEx_weight_gradients = np.outer(self.inputs, delta)
         self.trainEx_bias_gradients = delta 
+        self.loss = MSE_error 
     def hidlayer_backward(self, nextLayer): 
         actDerivFunc = activationFuncToGradFunc[self.activation_func]
         actFuncGradient = actDerivFunc(self.z)
@@ -91,23 +92,54 @@ class Layer:
         self.resetGradients()
 
 
+class Network: 
+    def __init__(self, shape, input_size, activation_funcs=[]): 
+
+        if activation_funcs == []: 
+            self.layers = [Layer(shape[0], input_size, LeakyReLU)]
+        else: 
+            self.layers = [Layer(shape[0], input_size, activation_funcs[0])]
+        for i in range(1, len(shape)):
+            if activation_funcs == []: 
+                self.layers.append(Layer(shape[i], shape[i-1], LeakyReLU))
+            else: 
+                self.layers.append(Layer(shape[i], shape[i-1], activation_funcs[i]))
+        
+    def forward(self, inputs): 
+        for i in self.layers: 
+            inputs = i.forward(inputs)
+        self.output = inputs
+        return inputs
+    
+    def backward(self, output): 
+        self.layers[-1].outlayer_backward(output)
+
+        for i in range(len(self.layers)-2, -1, -1): 
+            self.layers[i].hidlayer_backward(self.layers[i+1])
+        
+        for i in self.layers: 
+            i.addGradients()
+    
+    def applyGradients(self, learnRate=0.05): 
+        for i in self.layers: 
+            i.applyGradients(learnRate)
+
+XORNet = Network([4,4,1], 2)
+
+trainData = [([0,0], [0]), ([0,1], [1]), ([1,0], [1]), ([1,1], [0])] * 5000
 
 
+for i in range(0, len(trainData), 4):
+    loss = 0 
+    for j in range(0, 4): 
+        XORNet.forward(trainData[i+j][0])
+        XORNet.backward(trainData[i+j][1])
+        loss += XORNet.layers[-1].loss 
+    loss = loss / 4 
+    print("batch {}, loss={}".format(i, loss))
+    XORNet.applyGradients()
 
-# testing code 
+XORNet.forward([1,1])
+print(XORNet.output)
 
-hid1 = Layer(4, 2, LeakyReLU)
-hid2 = Layer(4, 4, LeakyReLU)
-out = Layer(1, 4, LeakyReLU)
 
-hid1.forward([0, 0])
-hid2.forward(hid1.output)
-out.forward(hid2.output)
-
-print(hid1.output)
-print(hid2.output)
-print(out.output)
-
-out.outlayer_backward([0])
-hid2.hidlayer_backward(out)
-hid1.hidlayer_backward(hid2)
