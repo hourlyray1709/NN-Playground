@@ -18,18 +18,35 @@ def MSE_grad(predicted, actual):
     actual = np.array(actual)
     return 2 * (predicted - actual)
 
+def softmax(x): 
+    return np.exp(x-np.max(x)) / np.sum(np.exp(x))
+
+def softmaxGrad(predicted): 
+    jacobian = np.diag(predicted) - np.outer(predicted, predicted)
+    return jacobian
+
+def crossEntropy(predicted, actual):
+    return -np.dot(actual, np.log(predicted))
+
+def softmaxCrossEntrophGrad(predicted, actual): 
+    return predicted - actual 
+
 activationFuncToGradFunc = {
     LeakyReLU : LeakyReLU_grad,
+    softmax : softmaxGrad, 
+}
 
+lossFuncToGradFunc = {
+    MSE : MSE_grad, 
 }
 
 class Layer: 
-    def __init__(self, num_neurons, input_size, activation_func, override_weights=None, override_bias=None, loss_func=None): 
+    def __init__(self, num_neurons, input_size, activation_func, override_weights=None, override_bias=None, loss_func=MSE): 
         self.input_size = input_size 
         self.num_neurons = num_neurons
 
         self.activation_func = activation_func
-        self.loss_func = None 
+        self.loss_func = loss_func
 
         if override_weights == None: 
             self.weights = np.random.uniform(-1, 1, (input_size, num_neurons,))                              # weights[4, 0] means the weight going from 4th input to 0th output neuron
@@ -56,16 +73,19 @@ class Layer:
         self.output = self.activation_func(z)
         return self.output
     def outlayer_backward(self, outputs): 
-        MSE_error = MSE(self.output, outputs)
-        MSE_gradient = MSE_grad(self.output, outputs)         # MSE grad is the deriv of Loss wrt activation, shape (num_neurons,)
-        actDerivFunc = activationFuncToGradFunc[self.activation_func]  # use the correct gradient function depending on actFuc
-        actFuncGradient = actDerivFunc(self.z)           # deriv of activation wrt to feedforward z value, shape (num_neurons,)
-        delta = MSE_gradient * actFuncGradient           # derive of loss wrt to z value, shape (num_neurons,)
+        error = self.loss_func(self.output, outputs)
+        if self.activation_func == softmax and self.loss_func == crossEntropy: 
+            delta = softmaxCrossEntrophGrad(self.output, outputs)                 # special case for using softmax with cross entropy
+        else: 
+            error_gradient = lossFuncToGradFunc[self.loss_func](self.output, outputs)    # use the mapped function to find gradient 
+            actDerivFunc = activationFuncToGradFunc[self.activation_func]  # use the correct gradient function depending on actFuc
+            actFuncGradient = actDerivFunc(self.z)           # deriv of activation wrt to feedforward z value, shape (num_neurons,)
+            delta = actFuncGradient @ error_gradient          # derive of loss wrt to z value, shape (num_neurons,)
         self.delta = delta               
         
         self.trainEx_weight_gradients = np.outer(self.inputs, delta)     # stores gradients for single training Example - trainEx
         self.trainEx_bias_gradients = delta 
-        self.loss = MSE_error                                            # save loss for loss visualisation later 
+        self.loss = error                                            # save loss for loss visualisation later 
     def hidlayer_backward(self, nextLayer): 
         actDerivFunc = activationFuncToGradFunc[self.activation_func]    # calculate deriv of act function wrt to inputs 
         actFuncGradient = actDerivFunc(self.z)                      
@@ -159,11 +179,13 @@ class Network:
 
 def XORExample():
     XORNet = Network([4,4,1], 2)
+    XORNet.layers[-1].activation_func = softmax
+    XORNet.layers[-1].loss_func = crossEntropy
 
     dataInputs = [(0,0), (0,1), (1,0), (1,1)] 
     dataOutputs = [0, 1, 1, 0] 
 
-    XORNet.train(dataInputs, dataOutputs, 4, 1000, visualise=True)
+    XORNet.train(dataInputs, dataOutputs, 4, 2000, visualise=False)
     XORNet.forward([1,1])
     print(XORNet.output)
 
@@ -173,7 +195,7 @@ def NANDExample():
     dataInputs = [(0,0), (0,1), (1,0), (1,1)] 
     dataOutputs = [1, 1, 1, 0]
 
-    NANDNet.train(dataInputs, dataOutputs, 4, 1000, visualise=True)
+    NANDNet.train(dataInputs, dataOutputs, 4, 1000, visualise=False)
     NANDNet.forward([1,1])
     print(NANDNet.output)
 
